@@ -73,7 +73,7 @@ def done_running(job):
 def timestep_label(job):
     if done_running(job):
         return 'done running'
-    ts = job.doc.get('timestep', -100)
+    ts = job.doc.get('timestep', None)
     if ts is None:
         return False
     ts = str(ts)
