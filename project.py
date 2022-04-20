@@ -34,9 +34,8 @@ class Project(FlowProject):
             ('gsd_frequency', int(1e5)),
             ('thermo_frequency', int(1e4)),
             ('n_tune_blocks', 20),
-            ('n_tune_steps', 1000),
-            ('n_run_blocks', 10000),
-            ('n_run_steps', int(1e4)),
+            ('n_tune_steps', 10),
+            ('n_run_steps', int(3e5)),
             ('compress_scale', 0.9999),
             ('stop_after', int(50e6)),
             )
@@ -60,8 +59,7 @@ class Project(FlowProject):
 
 def done_running(job):
     try:
-        tts = job.doc.n_run_steps * job.doc.n_run_blocks
-        end_time = job.doc.get('stop_after', tts)
+        end_time = job.doc.stop_after
         cr = job.doc.get('continue_running', True)
         ts_criterion = job.doc.get('timestep', 0) > end_time
         stopping_criteria = (not cr, ts_criterion)
@@ -228,24 +226,18 @@ def sample(job):
     import hoomd.hpmc
     import hoomd.jit
     # get all parameters first here
-    # betaP = job.sp.betaP
     seed = job.sp.replica
     use_floppy_box = job.sp.use_floppy_box
     gsd_frequency = job.doc.gsd_frequency
     thermo_frequency = job.doc.thermo_frequency
     n_tune_blocks = job.doc.n_tune_blocks
     n_tune_steps = job.doc.n_tune_steps
-    n_run_blocks = job.doc.n_run_blocks
     n_run_steps = job.doc.n_run_steps
-    n_run_blocks = job.doc.n_run_blocks
-    n_run_steps = job.doc.n_run_steps
-    # volume_delta = job.doc.get('ln_volume_delta', 0.001)
     mc_d, mc_a = job.doc.mc_d, job.doc.mc_a
     host_vertices = np.array(job.doc.host_vertices)[:, :2]
     scale = job.doc.compress_scale
-    do_tuning = job.doc.get('do_tuning', True)
-    # shear_delta = job.doc.get('shear_delta', (0.001, 0, 0))
-    # aspect_delta = job.doc.get('aspect_delta', 0.001)
+    last_tuning_kT = job.doc.get('last_tuning_kT', np.inf)
+    final_step = job.doc.stop_after
 
     # handle hoomd message files: save old output to a file
     msg_fn = job.fn('hoomd-log.txt')
@@ -271,7 +263,6 @@ def sample(job):
             group=hoomd.group.all(), truncate=True, period=restart_frequency,
             phase=0)
     mc = hoomd.hpmc.integrate.convex_polygon(seed=seed, restore_state=True)
-    # mc.shape_param.set('A', vertices=host_vertices)
     for patch_offset, letter in zip(job.sp.patch_offset, string.ascii_uppercase):
         mc.shape_param.set(letter, vertices=host_vertices[:, :2])
     
@@ -300,10 +291,6 @@ def sample(job):
     A_particles = 0
     for ptype, count in N_types.items():
         area = job.doc.guest_areas.get(ptype, job.doc.host_area)
-        # if not ptype in job.doc.guest_areas:
-        #     area = job.doc.host_area
-        # else:
-        #     area = job.doc.guest_areas[ptype]
         A_particles += area * count
     A_target = A_particles / job.sp.phi
     L_current = np.array([system.box.Lx, system.box.Ly])
@@ -346,9 +333,8 @@ def sample(job):
 
     # patches
     snapshot = system.take_snapshot()
-    host_type_indexes = [snapshot.particles.types.index(letter) for patch_offset, letter in zip(job.sp.patch_offset, string.ascii_uppercase)]
-    # for patch_offset, letter in zip(job.sp.patch_offset, string.ascii_uppercase):
-    #     host_type_indexes.append(snapshot.particles.types.index(letter))
+    host_type_indexes = [snapshot.particles.types.index(letter) for 
+            patch_offset, letter in zip(job.sp.patch_offset, string.ascii_uppercase)]
     host_type_idx = "{"
     for x in host_type_indexes:
         host_type_idx += f"{x}"
@@ -360,7 +346,6 @@ def sample(job):
             # job.doc.patch_locations is an N_host_types x 3 x 3 array, so take
             # length of the first item for number of patches
             n_patches=len(job.doc.patch_locations[0]), 
-            # epsilon = 1 / job.sp.kT_ramp[0],
             sigma=job.sp.sigma,
             lambdasigma=job.sp.lambdasigma,
             host_type_idx=host_type_idx,
@@ -370,86 +355,65 @@ def sample(job):
     patches.alpha_iso[0] = 1 / job.sp.kT_ramp[0]
 
     def calculate_temp(job, timestep):
-        kT_0, kT_f, length = job.sp.kT_ramp
-        calculated_kT = (kT_f - kT_0) / length * timestep + kT_0
-        return max(calculated_kT, kT_f)
-
-    # box moves
-    tuners = []
-    # boxmc_period = 10
-    """if betaP:
-        box_moves = hoomd.hpmc.update.boxmc(mc, betaP, seed)
-        box_moves.set_period(boxmc_period)
-        box_moves.ln_volume(delta=volume_delta, weight=1.0)
-        log_quantities = ['hpmc_boxmc_ln_volume_acceptance', 'hpmc_boxmc_betaP']
-        box_tunables = ['dlnV']
-
-        # add floppy box moves if needed
-        if use_floppy_box:
-            box_moves.shear(delta=shear_delta, weight=1.0)
-            def get_tuner_value():
-                    return box_moves.aspect_delta
-            log_quantities.append('hpmc_boxmc_shear_acceptance')
-            box_tunables.extend(['dxy'])
-
-        # add the tuner and logger
-        box_tuner = hoomd.hpmc.util.tune_npt(
-                box_moves,
-                tunables=box_tunables,
-                target=0.5,
-                gamma=2.0,
-                max_scale=2)
-        tuners.append(box_tuner)
-        fn = 'boxmc-stats.txt'
-        loggers[fn[:-4]] = hoomd.analyze.log(job.fn(fn), log_quantities,
-                thermo_frequency, header_prefix='# ', overwrite=False)
-    """
-    # tune particle moves
-    if do_tuning:
-        for tune_block in range(n_tune_blocks):
-            for ptype in system.particles.types:
-                mc.shape_param[ptype].ignore_statistics = False
-                for other_type in system.particles.types:
-                    if other_type != ptype:
-                        mc.shape_param[other_type].ignore_statistics = True
-                hoomd.run(n_tune_steps)
-                mc_tuners[ptype].update()
-                for tuner in tuners:
-                    tuner.update()
-
-    # stop ignoring statistics
-    for ptype in system.particles.types:
-        mc.shape_param[ptype].ignore_statistics = False
-
-        # save the deltas in the job document
-        if hoomd.comm.get_rank() == 0:
-            for t in system.particles.types:
-                job.doc.mc_d[t] = mc.get_d(t)
-                job.doc.mc_a[t] = mc.get_a(t)
-            """
-            try:
-                job.doc.ln_volume_delta = box_moves.ln_volume_delta
-                job.doc.shear_delta = box_moves.shear_delta
-            except Exception as e:  # tuners probably not defined
-            """
-            job.doc.do_tuning = False
-        hoomd.comm.barrier()
+        if len(job.sp.kT_ramp) == 3:
+            kT_0, kT_f, length = job.sp.kT_ramp
+            calculated_kT = (kT_f - kT_0) / length * timestep + kT_0
+            return max(calculated_kT, kT_f)
+        elif len(job.sp.kT_ramp) == 5:
+            kT_const, dT_const, kT_0, kT_f, length = job.sp.kT_ramp
+            if timestep < dT_const:
+                return kT_const
+            else:
+                calculated_kT = (kT_f - kT_0) / length * (timestep-dT_const)
+                calculated_kT += kT_0
+                return max(calculated_kT, kT_f)
+        else:
+            raise ValueError('Invalid kT_ramp in job statepoint.')
 
     # run
-    try:
-        for run_block in range(n_run_blocks):
+    while True:
+        if hoomd.get_step() > final_step:
+            return
+        try:
+            # set new temperature
             new_kT = calculate_temp(job, hoomd.get_step())
             patches.alpha_iso[0] = 1 / new_kT
+
+            # tune particle moves if kT has changed more than 0.01
+            do_tuning = abs(last_tuning_kT - new_kT) > 0.01
+            if do_tuning:
+                for tune_block in range(n_tune_blocks):
+                    for ptype in system.particles.types:
+                        mc.shape_param[ptype].ignore_statistics = False
+                        for other_type in system.particles.types:
+                            if other_type != ptype:
+                                mc.shape_param[other_type].ignore_statistics = True
+                        hoomd.run(n_tune_steps)
+                        mc_tuners[ptype].update()
+                # save the deltas in the job document
+                if hoomd.comm.get_rank() == 0:
+                    for t in system.particles.types:
+                        job.doc.mc_d[t] = mc.get_d(t)
+                        job.doc.mc_a[t] = mc.get_a(t)
+                    job.doc.last_tuning_kT = new_kT
+                hoomd.comm.barrier()
+                last_tuning_kT = new_kT
+
+            # stop ignoring statistics from tuning
+            for ptype in system.particles.types:
+                mc.shape_param[ptype].ignore_statistics = False
+
+            # run
             hoomd.run(n_run_steps, limit_multiple=restart_frequency)
             if hoomd.comm.get_rank() == 0:
                 job.doc.timestep = hoomd.get_step()
             hoomd.comm.barrier()
             restart_writer.write_restart()
-    except hoomd.WalltimeLimitReached:
-        restart_writer.write_restart()
-        if hoomd.comm.get_rank() == 0:
-            job.doc.timestep = hoomd.get_step()
-        hoomd.comm.barrier()
+        except hoomd.WalltimeLimitReached:
+            restart_writer.write_restart()
+            if hoomd.comm.get_rank() == 0:
+                job.doc.timestep = hoomd.get_step()
+            hoomd.comm.barrier()
         return
     return
 
