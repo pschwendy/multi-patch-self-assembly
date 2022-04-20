@@ -309,9 +309,10 @@ def sample(job):
     L_current = np.array([system.box.Lx, system.box.Ly])
     L_target = L_current * np.sqrt(A_target/system.box.get_volume())
     phi = A_particles / system.box.get_volume()
-    hoomd.run(1)
     n_expand_steps = 0
     need_to_compress = not job.doc.get('compressed', False)
+    if need_to_compress:
+        hoomd.run(1)
     while (not math.isclose(phi, job.sp.phi)) and need_to_compress:
         L = np.maximum(L_current*scale, L_target)
         hoomd.update.box_resize(Lx=L[0], Ly=L[1], period=None)
