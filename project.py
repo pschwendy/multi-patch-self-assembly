@@ -221,8 +221,8 @@ def initialize(job):
 @Project.operation
 @Project.pre.after(initialize)
 @Project.post(done_running)
-@directives(executable='singularity exec software-greatlakes.simg python3')
 @directives(nranks=16)
+@directives(executable='singularity exec software.simg python3')
 def sample(job):
     import hoomd
     import hoomd.hpmc
