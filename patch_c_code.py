@@ -1,6 +1,7 @@
 code_patch_SQWELL = """
 // initialize the patches
-const vec3<float> all_patch_locations[][3] = {{
+const int n_patches = {n_patches};
+const vec3<float> all_patch_locations[][n_patches] = {{
     {patch_locations}
 }};
 // initialize pair energy
@@ -10,7 +11,6 @@ float pair_eng = 0.0;
 const float epsilon = alpha_iso[0];
 const float sigma = {sigma:.15f};
 const float lambdasigma = {lambdasigma:.15f};
-const int n_patches = {n_patches};
 const unsigned int host_type_indexes[] = {host_type_idx};
 
 // for each host_type_idx in host_type_idx[]

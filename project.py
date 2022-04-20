@@ -348,26 +348,25 @@ def sample(job):
     host_type_indexes = [snapshot.particles.types.index(letter) for patch_offset, letter in zip(job.sp.patch_offset, string.ascii_uppercase)]
     # for patch_offset, letter in zip(job.sp.patch_offset, string.ascii_uppercase):
     #     host_type_indexes.append(snapshot.particles.types.index(letter))
-    if job.sp.kT_ramp != 0.0:
-        host_type_idx = "{"
-        for x in host_type_indexes:
-            host_type_idx += f"{x}"
-            if x is not host_type_indexes[-1]:
-                host_type_idx += ", "
-        host_type_idx += "}"
-        print(host_type_idx)
-        patch_code = patch_c_code.code_patch_SQWELL.format(
-                patch_locations=job._project.generate_patch_location_c_code(job),
-                n_patches=len(job.doc.patch_locations),
-                # epsilon = 1 / job.sp.kT_ramp[0],
-                sigma=job.sp.sigma,
-                lambdasigma=job.sp.lambdasigma,
-                host_type_idx=host_type_idx,
-                )
-        print(job._project.generate_patch_location_c_code(job))
-        print(patch_code)
-        patches = hoomd.jit.patch.user(mc, code=patch_code, r_cut=2.0, array_size=1)
-        patches.alpha_iso[0] = 1 / job.sp.kT_ramp[0]
+    host_type_idx = "{"
+    for x in host_type_indexes:
+        host_type_idx += f"{x}"
+        if x is not host_type_indexes[-1]:
+            host_type_idx += ", "
+    host_type_idx += "}"
+    patch_code = patch_c_code.code_patch_SQWELL.format(
+            patch_locations=job._project.generate_patch_location_c_code(job),
+            # job.doc.patch_locations is an N_host_types x 3 x 3 array, so take
+            # length of the first item for number of patches
+            n_patches=len(job.doc.patch_locations[0]), 
+            # epsilon = 1 / job.sp.kT_ramp[0],
+            sigma=job.sp.sigma,
+            lambdasigma=job.sp.lambdasigma,
+            host_type_idx=host_type_idx,
+            )
+    print(patch_code)
+    patches = hoomd.jit.patch.user(mc, code=patch_code, r_cut=2.0, array_size=1)
+    patches.alpha_iso[0] = 1 / job.sp.kT_ramp[0]
 
     def calculate_temp(job, timestep):
         kT_0, kT_f, length = job.sp.kT_ramp
