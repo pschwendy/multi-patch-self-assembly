@@ -215,6 +215,21 @@ def initialize(job):
     hoomd.comm.barrier()
     return
 
+def calculate_temp(job, timestep):
+    if len(job.sp.kT_ramp) == 3:
+        kT_0, kT_f, length = job.sp.kT_ramp
+        calculated_kT = (kT_f - kT_0) / length * timestep + kT_0
+        return max(calculated_kT, kT_f)
+    elif len(job.sp.kT_ramp) == 5:
+        kT_const, dT_const, kT_0, kT_f, length = job.sp.kT_ramp
+        if timestep < dT_const:
+            return kT_const
+        else:
+            calculated_kT = (kT_f - kT_0) / length * (timestep-dT_const)
+            calculated_kT += kT_0
+            return max(calculated_kT, kT_f)
+    else:
+        raise ValueError('Invalid kT_ramp in job statepoint.')
 
 @Project.operation
 @Project.pre.after(initialize)
@@ -354,21 +369,6 @@ def sample(job):
     patches = hoomd.jit.patch.user(mc, code=patch_code, r_cut=2.0, array_size=1)
     patches.alpha_iso[0] = 1 / job.sp.kT_ramp[0]
 
-    def calculate_temp(job, timestep):
-        if len(job.sp.kT_ramp) == 3:
-            kT_0, kT_f, length = job.sp.kT_ramp
-            calculated_kT = (kT_f - kT_0) / length * timestep + kT_0
-            return max(calculated_kT, kT_f)
-        elif len(job.sp.kT_ramp) == 5:
-            kT_const, dT_const, kT_0, kT_f, length = job.sp.kT_ramp
-            if timestep < dT_const:
-                return kT_const
-            else:
-                calculated_kT = (kT_f - kT_0) / length * (timestep-dT_const)
-                calculated_kT += kT_0
-                return max(calculated_kT, kT_f)
-        else:
-            raise ValueError('Invalid kT_ramp in job statepoint.')
 
     # run
     while True:
@@ -414,7 +414,7 @@ def sample(job):
             if hoomd.comm.get_rank() == 0:
                 job.doc.timestep = hoomd.get_step()
             hoomd.comm.barrier()
-        return
+            return
     return
 
 
