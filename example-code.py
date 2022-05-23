@@ -3,8 +3,14 @@ import freud
 import numpy as np
 
 
+# reading gsd files is very straightforward, you only need the gsd package see
+# https://gsd.readthedocs.io/en/v2.5.2/ for info (it's pip- and
+# conda-installable)
 gsd_filename = 'workspace/8e7d9da1df4b075f4558acff994e819b/traj.gsd'
+
+# first open the file with gsd.hoomd:
 with gsd.hoomd.open(gsd_filename, 'rb') as traj:
+    # the simply iterate over the open file
     for frame in traj:
         # get box information from gsd file and construct a freud box with it,
         # so that we can easily get things like the volume (area in 2D)
