@@ -18,7 +18,6 @@ bool type_i_is_host = false;
 bool type_j_is_host = false;
 for(unsigned int host_type_idx: host_type_indexes) {{
     if (type_i == host_type_idx) {{
-        // we only have patches on the host particles, so early exit if possible
         type_i_is_host = true; 
     }}
     if (type_j == host_type_idx) {{
@@ -26,7 +25,8 @@ for(unsigned int host_type_idx: host_type_indexes) {{
     }}
 }}
 
-if(!type_i_is_host && !type_j_is_host) {{
+// early exit if at least one particle is NOT a host particle
+if(!type_i_is_host || !type_j_is_host) {{
     return 0.0;
 }}
 
