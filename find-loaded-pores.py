@@ -108,7 +108,8 @@ def get_patch_nlist(frame, box, patch_locs, lambdasigma, host_pos, host_ors):
         idx_i = i // 3
         idx_j = j // 3
         host_nlist.append((idx_i, idx_j))
-
+    print(f"hosts: {len(host_pos)}")
+    print(f"nlist: {len(host_nlist)}")
     return host_nlist
 
 
@@ -136,6 +137,12 @@ For example, map[(a, b)] = 0 and map[(b, a)] = 0
 
 3. 
 """
+import copy
+# idx = 0
+# 0, 1, 5, 2, 3, 6
+# 0, 6, 3, 2, 5, 1
+# [0][1] = 1, [0][6] = 1
+# try set of pairs (?)
 def find_hexamer(adj_matrix, passed_rows, row, hexamer, hexamers):
     # base case: a loop is discovered -> add hexamer to hexamers
     if len(hexamer) == 5 and adj_matrix[row][hexamer[0]] == 1:
@@ -148,12 +155,15 @@ def find_hexamer(adj_matrix, passed_rows, row, hexamer, hexamers):
     # neither base case is satisfied -> add current row to hexamer and move to recursive case
     else:
         hexamer.append(row)
-    
+
     # FIX: does not account for certain cases
+    # last_row = row
     for idx in range(passed_rows + 1, len(adj_matrix[row])):
         x = adj_matrix[row][idx]
+        # if len(hexamer) == 5 and hexamer[4] == 1657 and idx == 1796:
         if x == 1 and not (idx in hexamer):
-            find_hexamer(adj_matrix, passed_rows, idx, hexamer, hexamers)
+            copy_of_hexamer = copy.deepcopy(hexamer)
+            find_hexamer(adj_matrix, passed_rows, idx, copy_of_hexamer, hexamers)
             
 
 def calc_loaded_pores(frame, nlist, num_particles):
@@ -164,32 +174,43 @@ def calc_loaded_pores(frame, nlist, num_particles):
         adj_matrix[i][j] = 1
         adj_matrix[j][i] = 1
 
-    print(np.sum(adj_matrix))
     hexamers = []
+
+    # [822, 1670, 1876, 2245, 1657, 1796]
     for idx, row in enumerate(adj_matrix):
         find_hexamer(adj_matrix, passed_rows, idx, [], hexamers)
         passed_rows += 1
 
+    # print(hexamers)
+    
     Lx, Ly, Lz, xy, xz, yz = frame.configuration.box
     box = freud.Box(Lx=Lx, Ly=Ly, xy=xy, is2D=True)
     
     typeid_A = frame.particles.types.index('A')
     host_pos = pos[frame.particles.typeid == typeid_A]
 
-    guest_pos = pos[frame.particles.typeid != typeid_A]
+    typeid_B = frame.particles.types.index('B')
+    guest_pos = pos[frame.particles.typeid == typeid_B]
 
     hexamer_center_locs = []
     r_circ = -np.inf
     for hexamer in hexamers:
-        com = np.mean(host_pos[hexamer], axis=0)
-        r_circ = max(r_circ, max(np.linalg.norm(host_pos[hexamer], axis=1)))
+        # com = np.mean(host_pos[hexamer], axis=0)
+        com = (0.5 * (box.wrap(host_pos[hexamer[3]] - host_pos[hexamer[0]]))) + host_pos[hexamer[0]]
+        # print(max(np.linalg.norm(host_pos[hexamer], axis=1)))
+        r_circ = max(r_circ, max(np.linalg.norm(box.wrap(host_pos[hexamer] - com), axis=1)))
+        if r_circ > 50:
+            breakpoint()
         hexamer_center_locs.append(com)
-
+    
     hexamers_center_locs = np.array(hexamer_center_locs)
-    aabbq = freud.AABBQuery(box, hexamer_center_locs)
-    qargs = dict(mode="nearest", exclude_ii=False, num_neighbors=1, r_max=r_circ)
+    aabbq = freud.AABBQuery(box, hexamers_center_locs)
+    # breakpoint()
+    print(f"r_circ: {r_circ}")
+    qargs = dict(mode="ball", exclude_ii=False, r_max=r_circ)
     guest_hexamer_nlist = aabbq.query(guest_pos, qargs).toNeighborList()
     
+    print(len(guest_pos))
     n_captured_guest = len(guest_hexamer_nlist)
     print(n_captured_guest)
     n_hexamers = len(hexamers)
@@ -218,7 +239,7 @@ with gsd.hoomd.open(filename, 'rb') as gsd_file:
         typeid_A = frame.particles.types.index('A')
         host_pos = pos[frame.particles.typeid == typeid_A]
         host_ors = ors[frame.particles.typeid == typeid_A]
-
+        print(job.sp.lambdasigma)
         nlist = get_patch_nlist(frame, box, job.doc.patch_locations[0], job.sp.lambdasigma, host_pos, host_ors)
         fractional_loading = calc_loaded_pores(frame, nlist, len(host_pos))
         print(fractional_loading)
