@@ -108,8 +108,8 @@ def get_patch_nlist(frame, box, patch_locs, lambdasigma, host_pos, host_ors):
         idx_i = i // 3
         idx_j = j // 3
         host_nlist.append((idx_i, idx_j))
-    print(f"hosts: {len(host_pos)}")
-    print(f"nlist: {len(host_nlist)}")
+    print(f"num hosts: {len(host_pos)}")
+    print(f"len host_nlist: {len(host_nlist)}")
     return host_nlist
 
 
@@ -210,11 +210,11 @@ def calc_loaded_pores(frame, nlist, num_particles):
     qargs = dict(mode="ball", exclude_ii=False, r_max=r_circ)
     guest_hexamer_nlist = aabbq.query(guest_pos, qargs).toNeighborList()
     
-    print(len(guest_pos))
+    print(f'num guests = {len(guest_pos)}')
     n_captured_guest = len(guest_hexamer_nlist)
-    print(n_captured_guest)
+    print(f'num captured guests = {n_captured_guest}')
     n_hexamers = len(hexamers)
-    print(n_hexamers)
+    print(f'num hexamers = {n_hexamers}')
 
     fractional_loading = n_captured_guest / n_hexamers
     return fractional_loading
@@ -222,11 +222,8 @@ def calc_loaded_pores(frame, nlist, num_particles):
     
 
 import signac
-project = signac.get_project('../self-assembly')
-print(len(project))
-
-job = project.open_job(id='5f27cf771dbf85eb3ce5c99b8852219e')
-print(job)
+project = signac.get_project()
+job = project.open_job(id='cc06')
 filename = job.fn('traj.gsd')
 with gsd.hoomd.open(filename, 'rb') as gsd_file:
     for frame in gsd_file[-1:]:
@@ -239,7 +236,7 @@ with gsd.hoomd.open(filename, 'rb') as gsd_file:
         typeid_A = frame.particles.types.index('A')
         host_pos = pos[frame.particles.typeid == typeid_A]
         host_ors = ors[frame.particles.typeid == typeid_A]
-        print(job.sp.lambdasigma)
+        print(f'patch range = {job.sp.lambdasigma}')
         nlist = get_patch_nlist(frame, box, job.doc.patch_locations[0], job.sp.lambdasigma, host_pos, host_ors)
         fractional_loading = calc_loaded_pores(frame, nlist, len(host_pos))
-        print(fractional_loading)
+        print(f'fractional loading = {fractional_loading}')
