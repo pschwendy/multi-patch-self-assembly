@@ -13,6 +13,7 @@ import patch_c_code
 
 
 class Project(FlowProject):
+
     def __init__(self):
         flow.FlowProject.__init__(self)
         self.required_sp_params = (
@@ -29,7 +30,7 @@ class Project(FlowProject):
             'lambdasigma',
             'kT',
             'guest_info',  # [(relative size, mol_fraction),...]
-            )
+        )
         self.required_defaults = (
             ('gsd_frequency', int(1e5)),
             ('thermo_frequency', int(1e4)),
@@ -38,17 +39,18 @@ class Project(FlowProject):
             ('n_run_steps', int(3e5)),
             ('compress_scale', 0.9999),
             ('stop_after', int(50e6)),
-            )
+        )
 
     @staticmethod
     def generate_patch_location_c_code(job):
         ret_str = ''
         for particle in job.doc.patch_locations:
-            ret_str +="{"
+            ret_str += "{"
             for pl in particle:
-                ret_str_init = 'vec3<float>({}),\n'.format(', '.join(map(str, pl)))
+                ret_str_init = 'vec3<float>({}),\n'.format(', '.join(
+                    map(str, pl)))
                 if pl is particle[-1]:
-                    ret_str_init = ret_str_init[:len(ret_str_init)-2] + "\n"
+                    ret_str_init = ret_str_init[:len(ret_str_init) - 2] + "\n"
                 ret_str += ret_str_init
             if particle is not job.doc.patch_locations[-1]:
                 ret_str += "},\n"
@@ -67,6 +69,7 @@ def done_running(job):
     except:
         return False
 
+
 @Project.label
 def timestep_label(job):
     if done_running(job):
@@ -75,7 +78,7 @@ def timestep_label(job):
     if ts is None:
         return False
     ts = str(ts)
-    return '{}.{}{}e{}'.format(ts[0], ts[1], ts[2], len(ts)-1)
+    return '{}.{}{}e{}'.format(ts[0], ts[1], ts[2], len(ts) - 1)
 
 
 @Project.operation
@@ -99,19 +102,20 @@ def initialize(job):
 
     # figure out shape vertices and patch locations
     n_e = job.sp.n_host_edges
-    xs = np.array([np.cos(n*2*np.pi/n_e) for n in range(n_e)])
-    ys = np.array([np.sin(n*2*np.pi/n_e) for n in range(n_e)])
+    xs = np.array([np.cos(n * 2 * np.pi / n_e) for n in range(n_e)])
+    ys = np.array([np.sin(n * 2 * np.pi / n_e) for n in range(n_e)])
     zs = np.zeros_like(ys)
     host_vertices = np.vstack((xs, ys, zs)).T
 
     # create the guest vertices...they'll be scaled appropriately later
     n_guest_edges = job.sp.n_guest_edges
-    xs = np.array([np.cos(n*2*np.pi/n_guest_edges) for n in range(n_guest_edges)])
-    ys = np.array([np.sin(n*2*np.pi/n_guest_edges) for n in range(n_guest_edges)])
+    xs = np.array(
+        [np.cos(n * 2 * np.pi / n_guest_edges) for n in range(n_guest_edges)])
+    ys = np.array(
+        [np.sin(n * 2 * np.pi / n_guest_edges) for n in range(n_guest_edges)])
     zs = np.zeros_like(ys)
     guest_vertices = np.vstack((xs, ys, zs)).T
 
-    
     # build the system
     n_repeats = job.sp.n_repeats
     if job.sp.initial_config == 'dilute':
@@ -119,7 +123,7 @@ def initialize(job):
         system = hoomd.init.create_lattice(uc, n_repeats)
     else:
         raise NotImplementedError('Initialization not implemented.')
-    
+
     # scale edges to have unit length edges
     edge_length = np.linalg.norm(host_vertices[1] - host_vertices[0])
     host_area = scipy.spatial.ConvexHull(host_vertices[:, :2]).volume
@@ -127,9 +131,10 @@ def initialize(job):
     vertex_vertex_vectors = np.roll(host_vertices, -1, axis=0) - host_vertices
     half_edge_locations = host_vertices + 0.5 * vertex_vertex_vectors
     patch_locations = []
-    for patch_offset, letter in zip(job.sp.patch_offset, string.ascii_uppercase):
+    for patch_offset, letter in zip(job.sp.patch_offset,
+                                    string.ascii_uppercase):
         f = patch_offset
-        pl_np = half_edge_locations + f * (host_vertices - half_edge_locations) 
+        pl_np = half_edge_locations + f * (host_vertices - half_edge_locations)
         patch_locations.append(pl_np.tolist())
         system.particles.types.add(letter)
 
@@ -138,9 +143,11 @@ def initialize(job):
     indices = np.arange(len(system.particles), dtype=np.int)
     shuffle(indices)
     start_idx = 0
-    n_guest_particles = int(sum([x[1] for x in job.sp.guest_info]) * len(system.particles))
+    n_guest_particles = int(
+        sum([x[1] for x in job.sp.guest_info]) * len(system.particles))
     n_host_particles = int(len(system.particles) - n_guest_particles)
-    for patch_offset, ptype in zip(job.sp.patch_offset, system.particles.types):
+    for patch_offset, ptype in zip(job.sp.patch_offset,
+                                   system.particles.types):
         n_this_type = int(n_host_particles / len(job.sp.patch_offset))
         type_idx = snapshot.particles.types.index(ptype)
         end_idx = start_idx + n_this_type
@@ -148,9 +155,10 @@ def initialize(job):
             snapshot.particles.typeid[p_idx] = type_idx
         start_idx = end_idx
     system.restore_snapshot(snapshot)
-    
+
     # add the different guests
-    guest_particle_area = scipy.spatial.ConvexHull(guest_vertices[:, :2]).volume
+    guest_particle_area = scipy.spatial.ConvexHull(
+        guest_vertices[:, :2]).volume
     guests, guest_areas = {}, {}
     ptypes = [x for x in string.ascii_uppercase[len(job.sp.patch_offset):]]
     for rs, xg in job.sp.guest_info:
@@ -180,14 +188,17 @@ def initialize(job):
 
     # restart writer; period=None since we'll just call write_restart() at end
     restart_writer = hoomd.dump.gsd(filename=job.fn('restart.gsd'),
-            group=hoomd.group.all(), truncate=True, period=None,
-            phase=0)
+                                    group=hoomd.group.all(),
+                                    truncate=True,
+                                    period=None,
+                                    phase=0)
 
     # set up the integrator with the shape info
     seed = job.sp.replica
     mc = hoomd.hpmc.integrate.convex_polygon(seed=seed, d=0, a=0)
     # mc.shape_param.set('A', vertices=host_vertices[:, :2])
-    for patch_offset, letter in zip(job.sp.patch_offset, string.ascii_uppercase):
+    for patch_offset, letter in zip(job.sp.patch_offset,
+                                    string.ascii_uppercase):
         mc.shape_param.set(letter, vertices=host_vertices[:, :2])
     for ptype, vertices in guests.items():
         mc.shape_param.set(ptype, vertices=vertices[:, :2])
@@ -196,7 +207,7 @@ def initialize(job):
     hoomd.run(1)
     mc.set_params(d=0.1, a=0.5)
 
-    # save everything into the job doc that we need to    
+    # save everything into the job doc that we need to
     if hoomd.comm.get_rank() == 0:
         job.doc.mc_d = {x: 0.1 for x in system.particles.types}
         job.doc.mc_a = {x: 0.1 for x in system.particles.types}
@@ -215,6 +226,7 @@ def initialize(job):
     hoomd.comm.barrier()
     return
 
+
 def calculate_temp(job, timestep):
     if len(job.sp.kT_ramp) == 3:
         kT_0, kT_f, length = job.sp.kT_ramp
@@ -225,17 +237,21 @@ def calculate_temp(job, timestep):
         if timestep < dT_const:
             return kT_const
         else:
-            calculated_kT = (kT_f - kT_0) / length * (timestep-dT_const)
+            calculated_kT = (kT_f - kT_0) / length * (timestep - dT_const)
             calculated_kT += kT_0
             return max(calculated_kT, kT_f)
     else:
         raise ValueError('Invalid kT_ramp in job statepoint.')
 
+
 @Project.operation
 @Project.pre.after(initialize)
 @Project.post(done_running)
 @directives(nranks=16)
-@directives(executable='singularity exec software.simg python3')
+@directives(
+    executable='singularity exec software.simg python3',
+    walltime=2,
+)
 def sample(job):
     import hoomd
     import hoomd.hpmc
@@ -271,33 +287,52 @@ def sample(job):
     restart_fn = job.fn('restart.gsd')
     system = hoomd.init.read_gsd(initial_gsd_fn, restart_fn)
 
-    gsd_writer = hoomd.dump.gsd(job.fn('traj.gsd'), gsd_frequency,
-            hoomd.group.all(), overwrite=False, truncate=False)
+    gsd_writer = hoomd.dump.gsd(job.fn('traj.gsd'),
+                                gsd_frequency,
+                                hoomd.group.all(),
+                                overwrite=False,
+                                truncate=False)
     restart_frequency = gsd_frequency
     restart_writer = hoomd.dump.gsd(filename=restart_fn,
-            group=hoomd.group.all(), truncate=True, period=restart_frequency,
-            phase=0)
+                                    group=hoomd.group.all(),
+                                    truncate=True,
+                                    period=restart_frequency,
+                                    phase=0)
     mc = hoomd.hpmc.integrate.convex_polygon(seed=seed, restore_state=True)
-    for patch_offset, letter in zip(job.sp.patch_offset, string.ascii_uppercase):
+    for patch_offset, letter in zip(job.sp.patch_offset,
+                                    string.ascii_uppercase):
         mc.shape_param.set(letter, vertices=host_vertices[:, :2])
-    
+
     # add guest particles
     for ptype, vertices in job.doc.get('guest_vertices', {}).items():
         mc.shape_param.set(ptype, vertices=np.array(vertices)[:, :2])
-    mc_tuners = {t: hoomd.hpmc.util.tune(mc, tunables=['d', 'a'], target=0.33,
-        gamma=0.5, type=t) for t in system.particles.types}
+    mc_tuners = {
+        t: hoomd.hpmc.util.tune(mc,
+                                tunables=['d', 'a'],
+                                target=0.33,
+                                gamma=0.5,
+                                type=t)
+        for t in system.particles.types
+    }
     restart_writer.dump_state(mc)
     gsd_writer.dump_state(mc)
     restart_writer.dump_shape(mc)
     gsd_writer.dump_shape(mc)
-    logger_info = {'thermo.txt': ['volume', 'lx', 'ly', 'lz', 'xy'], 
-            'hpmc-stats.txt': ['hpmc_sweep', 'hpmc_translate_acceptance', 
-            'hpmc_rotate_acceptance', 'hpmc_d', 'hpmc_a'],
-        'hpmc-patch-stats.txt': ['hpmc_patch_energy', 'hpmc_patch_rcut']}
+    logger_info = {
+        'thermo.txt': ['volume', 'lx', 'ly', 'lz', 'xy'],
+        'hpmc-stats.txt': [
+            'hpmc_sweep', 'hpmc_translate_acceptance',
+            'hpmc_rotate_acceptance', 'hpmc_d', 'hpmc_a'
+        ],
+        'hpmc-patch-stats.txt': ['hpmc_patch_energy', 'hpmc_patch_rcut']
+    }
     loggers = {}
     for fn, quantities in logger_info.items():
-        loggers[fn[:-4]] = hoomd.analyze.log(job.fn(fn), quantities,
-                thermo_frequency, header_prefix='# ', overwrite=False)
+        loggers[fn[:-4]] = hoomd.analyze.log(job.fn(fn),
+                                             quantities,
+                                             thermo_frequency,
+                                             header_prefix='# ',
+                                             overwrite=False)
 
     # compress if we're not at the target packing fraction
     N_types = {ptype: 0 for ptype in system.particles.types}
@@ -309,29 +344,32 @@ def sample(job):
         A_particles += area * count
     A_target = A_particles / job.sp.phi
     L_current = np.array([system.box.Lx, system.box.Ly])
-    L_target = L_current * np.sqrt(A_target/system.box.get_volume())
+    L_target = L_current * np.sqrt(A_target / system.box.get_volume())
     phi = A_particles / system.box.get_volume()
     n_expand_steps = 0
     need_to_compress = not job.doc.get('compressed', False)
     if need_to_compress:
         hoomd.run(1)
     while (not math.isclose(phi, job.sp.phi)) and need_to_compress:
-        L = np.maximum(L_current*scale, L_target)
+        L = np.maximum(L_current * scale, L_target)
         hoomd.update.box_resize(Lx=L[0], Ly=L[1], period=None)
         L_current = np.array([system.box.Lx, system.box.Ly])
         n_overlaps = mc.count_overlaps()
         phi = A_particles / system.box.get_volume()
         hoomd.context.msg.notice(
-                1, 'phi = {:.3f}; {} overlaps\n'.format(phi, n_overlaps))
+            1, 'phi = {:.3f}; {} overlaps\n'.format(phi, n_overlaps))
         n_overlap_remove_steps = 0
         while n_overlaps > 0:
             hoomd.run(100, quiet=True)
             n_overlaps = mc.count_overlaps()
             n_overlap_remove_steps += 1
             if n_overlap_remove_steps > 10:
-                L_exp = np.array([system.box.Lx, system.box.Ly, system.box.Lz]) * 1.01
-                hoomd.update.box_resize(Lx=L_exp[0], Ly=L_exp[1], Lz=L_exp[2]/1.01,
-                        period=None)
+                L_exp = np.array([system.box.Lx, system.box.Ly, system.box.Lz
+                                  ]) * 1.01
+                hoomd.update.box_resize(Lx=L_exp[0],
+                                        Ly=L_exp[1],
+                                        Lz=L_exp[2] / 1.01,
+                                        period=None)
                 n_expand_steps += 1
             L_current = np.array([system.box.Lx, system.box.Ly])
         if n_expand_steps > 10:
@@ -348,8 +386,10 @@ def sample(job):
 
     # patches
     snapshot = system.take_snapshot()
-    host_type_indexes = [snapshot.particles.types.index(letter) for 
-            patch_offset, letter in zip(job.sp.patch_offset, string.ascii_uppercase)]
+    host_type_indexes = [
+        snapshot.particles.types.index(letter) for patch_offset, letter in zip(
+            job.sp.patch_offset, string.ascii_uppercase)
+    ]
     host_type_idx = "{"
     for x in host_type_indexes:
         host_type_idx += f"{x}"
@@ -357,18 +397,20 @@ def sample(job):
             host_type_idx += ", "
     host_type_idx += "}"
     patch_code = patch_c_code.code_patch_SQWELL.format(
-            patch_locations=job._project.generate_patch_location_c_code(job),
-            # job.doc.patch_locations is an N_host_types x 3 x 3 array, so take
-            # length of the first item for number of patches
-            n_patches=len(job.doc.patch_locations[0]), 
-            sigma=job.sp.sigma,
-            lambdasigma=job.sp.lambdasigma,
-            host_type_idx=host_type_idx,
-            )
+        patch_locations=job._project.generate_patch_location_c_code(job),
+        # job.doc.patch_locations is an N_host_types x 3 x 3 array, so take
+        # length of the first item for number of patches
+        n_patches=len(job.doc.patch_locations[0]),
+        sigma=job.sp.sigma,
+        lambdasigma=job.sp.lambdasigma,
+        host_type_idx=host_type_idx,
+    )
     print(patch_code)
-    patches = hoomd.jit.patch.user(mc, code=patch_code, r_cut=2.0, array_size=1)
+    patches = hoomd.jit.patch.user(mc,
+                                   code=patch_code,
+                                   r_cut=2.0,
+                                   array_size=1)
     patches.alpha_iso[0] = 1 / job.sp.kT_ramp[0]
-
 
     # run
     while True:
@@ -387,7 +429,8 @@ def sample(job):
                         mc.shape_param[ptype].ignore_statistics = False
                         for other_type in system.particles.types:
                             if other_type != ptype:
-                                mc.shape_param[other_type].ignore_statistics = True
+                                mc.shape_param[
+                                    other_type].ignore_statistics = True
                         hoomd.run(n_tune_steps)
                         mc_tuners[ptype].update()
                 # save the deltas in the job document
