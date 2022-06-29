@@ -37,18 +37,18 @@ def create_adjacency_matrix(nlist, num_particles):
 
     Returns
     -------
-    adjacency_matrix : np.ndarray, shape=(num_particles, num_particles)
-        The adjacency matrix
+    adjacency_matrix : set of (i, j) tuples
+        The adjacency matrix, stored as a sparse matrix
 
     """
-    adj_matrix = np.zeros((num_particles, num_particles), dtype=np.uint8)
+    adj_matrix = set()
     for i, j in nlist:
-        adj_matrix[i][j] = 1
-        adj_matrix[j][i] = 1
+        adj_matrix.add((i, j))
+        adj_matrix.add((j, i))
     return adj_matrix
 
 
-def find_hexamer(adj_matrix, passed_rows, row, hexamer, hexamers):
+def find_hexamer(adj_matrix, passed_rows, row, hexamer, hexamers, num_hosts):
     """Recursively find a ring of bonded particles
 
     Note
@@ -59,7 +59,7 @@ def find_hexamer(adj_matrix, passed_rows, row, hexamer, hexamers):
     """
     # base case: a loop is discovered -> add hexamer to hexamers
     # TODO: don't add hexamer to hexamers if it's already in there
-    if len(hexamer) == 5 and adj_matrix[row][hexamer[0]] == 1:
+    if len(hexamer) == 5 and (row, hexamer[0]) in adj_matrix:
         hexamer.append(row)
         hexamers.append(hexamer)
         return
@@ -73,9 +73,8 @@ def find_hexamer(adj_matrix, passed_rows, row, hexamer, hexamers):
 
     # FIX: does not account for certain cases
     # last_row = row
-    for idx in range(passed_rows + 1, len(adj_matrix[row])):
-        x = adj_matrix[row][idx]
-        if x == 1 and not (idx in hexamer):
+    for idx in range(passed_rows + 1, num_hosts):
+        if (row, idx) in adj_matrix and not (idx in hexamer):
             copy_of_hexamer = copy.deepcopy(hexamer)
             find_hexamer(
                 adj_matrix,
@@ -83,10 +82,11 @@ def find_hexamer(adj_matrix, passed_rows, row, hexamer, hexamers):
                 idx,
                 copy_of_hexamer,
                 hexamers,
+                num_hosts,
             )
 
 
-def find_hexamers(adjacency_matrix):
+def find_hexamers(adjacency_matrix, num_hosts):
     """Find hexamers from the adjacency matrix
 
     This function calls the recursive function find_hexamer.
@@ -94,7 +94,7 @@ def find_hexamers(adjacency_matrix):
     Args
     ----
     adjacency_matrix : np.ndarray, shape=(n, n)
-        The adjacency matrix
+        The adjacency matrix, see docs of `create_adjacency_matrix`
 
     Returns
     -------
@@ -104,8 +104,15 @@ def find_hexamers(adjacency_matrix):
     """
     passed_rows = 0
     hexamers = []
-    for idx, row in enumerate(adjacency_matrix):
-        find_hexamer(adjacency_matrix, passed_rows, idx, [], hexamers)
+    for idx in range(num_hosts):
+        find_hexamer(
+            adjacency_matrix,
+            passed_rows,
+            idx,
+            [],
+            hexamers,
+            num_hosts,
+        )
         passed_rows += 1
     return hexamers
 
@@ -257,15 +264,12 @@ if __name__ == '__main__':
 
             # find hexamers from adjacency matrix
             start_time = time.time()
-            hexamers = find_hexamers(adj_matrix)
+            hexamers = find_hexamers(adj_matrix, len(host_idxs))
             end_time = time.time()
             print(f'find_hexamers() took {end_time - start_time} seconds')
-            hosts_in_hexamers = np.unique(np.array(hexamers, dtype=np.int64).flatten())
+            hosts_in_hexamers = np.unique(
+                np.array(hexamers, dtype=np.int64).flatten())
             global_idxs_hosts_in_hexamers = host_idxs[hosts_in_hexamers]
-
-            # exit if no pores found
-            if len(hexamers) == 0:
-                break
 
             # find pore centers
             _, indices = np.unique(
@@ -273,21 +277,28 @@ if __name__ == '__main__':
                 axis=0,
                 return_index=True,
             )
-            uniqe_hexamers = np.array(hexamers)[indices]
+            unique_hexamers = np.array(hexamers, dtype=np.int64)[indices]
             pore_centers, search_radius = get_pore_centers(
-                uniqe_hexamers,
+                unique_hexamers,
                 host_positions,
                 box,
             )
 
             # find captured guests
-            captured_guest_idxs = find_guests_in_pores(
-                guest_positions,
-                pore_centers,
-                search_radius,
-                box,
-            )
+            if len(hexamers) > 0:
+                captured_guest_idxs = find_guests_in_pores(
+                    guest_positions,
+                    pore_centers,
+                    search_radius,
+                    box,
+                )
+            else:
+                captured_guest_idxs = []
             global_idxs_guests_in_pores = guest_idxs[captured_guest_idxs]
+            print('STATS')
+            print('-----')
+            print(f'{len(unique_hexamers)} pores found')
+            print(f'{len(captured_guest_idxs)} captured guests found')
 
             # select particles for visualization
             hexamer_host_sel = ''.join([
