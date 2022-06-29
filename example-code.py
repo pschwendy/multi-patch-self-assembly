@@ -74,3 +74,21 @@ with gsd.hoomd.open(gsd_filename, 'rb') as traj:
             r_ij = pos_A[j] - pos_B[i]
             print(r_ij)
             break
+
+
+"""
+Here is a function I've used in the past to find patchy particles that are bonded.
+It works by creating a neighborlist of patches that are within the interaction
+range, which makes them bonded.
+"""
+def get_patch_nlist(frame, patch_locs, lambdasigma):
+    pos = frame.positions
+    ors = frame.orientations
+    patch_ors = np.repeat(frame.orientations, len(patch_locs), axis=0)
+    patch_pos = np.repeat(frame.positions, len(patch_locs), axis=0)
+    frame_patch_locations = np.tile(patch_locs, [frame.N, 1])
+    frame_patch_locations = rowan.rotate(patch_ors, frame_patch_locations)
+    frame_patch_locations += patch_pos
+    nq = freud.AABBQuery(get_box(frame), frame_patch_locations)
+    query_result = nq.query(frame_patch_locations, dict(r_max=lambdasigma, exclude_ii=True))
+    return query_result.toNeighborList()
