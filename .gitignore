@@ -1,0 +1,17 @@
+.signac_shell_history
+.signac_sp_cache.json.gz
+__pycache__/
+analysis/
+dashboard.out
+dashboard.py
+jnb.out
+move-output-files.py
+pore-finding/host_guest_analysis.egg-info/
+set-stop.py
+signac_project_document.json
+submit.bash
+submitter.bash
+submitter.out
+test-dashboard.py
+test.bash
+workspace/
