@@ -15,3 +15,9 @@ submitter.out
 test-dashboard.py
 test.bash
 workspace/
+
+# files to init new jobs
+init-fewer-guests.py
+init-guest-concentration.py
+init-guest-polydispersity.py
+init-same-offset.py
