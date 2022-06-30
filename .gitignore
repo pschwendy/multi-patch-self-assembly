@@ -15,9 +15,11 @@ submitter.out
 test-dashboard.py
 test.bash
 workspace/
+software.simg
 
 # files to init new jobs
 init-fewer-guests.py
 init-guest-concentration.py
 init-guest-polydispersity.py
 init-same-offset.py
+init-single-guest.py
