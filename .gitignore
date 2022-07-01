@@ -16,6 +16,7 @@ test-dashboard.py
 test.bash
 workspace/
 software.simg
+output-files/
 
 # files to init new jobs
 init-fewer-guests.py
