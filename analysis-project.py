@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import PIL
-from project import calculate_temp
+from project import calculate_temp, done_running
 import rowan
 import scipy.spatial
 
@@ -147,6 +147,7 @@ def plain_snapshot(job):
 
 @AnalysisProject.operation
 @AnalysisProject.pre.isfile('traj.gsd')
+@AnalysisProject.pre(lambda j: done_running(j))
 @AnalysisProject.post(lambda j: generic_post_condition(j, 'pore-analysis-timesteps.txt'))
 @directives(
     walltime=0.5,
