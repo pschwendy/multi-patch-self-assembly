@@ -19,6 +19,7 @@ software.simg
 output-files/
 
 # files to init new jobs
+init.py
 init-fewer-guests.py
 init-guest-concentration.py
 init-guest-polydispersity.py
