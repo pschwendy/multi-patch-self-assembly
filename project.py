@@ -78,7 +78,7 @@ def timestep_label(job):
     if ts is None:
         return False
     ts = str(ts)
-    return '{}.{}{}e{}'.format(ts[0], ts[1], ts[2], len(ts) - 1)
+    return f'{ts[0]}.{ts[1]}e{len(ts) - 1}'
 
 
 @Project.operation
