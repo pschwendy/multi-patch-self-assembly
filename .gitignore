@@ -1,27 +1,34 @@
-.signac_shell_history
-.signac_sp_cache.json.gz
-__pycache__/
-analysis/
-dashboard.out
-dashboard.py
-jnb.out
-move-output-files.py
-pore-finding/host_guest_analysis.egg-info/
-set-stop.py
-signac_project_document.json
-submit.bash
-submitter.bash
-submitter.out
-test-dashboard.py
-test.bash
+# outputs
 workspace/
 software.simg
 output-files/
+jnb.out
+dashboard.out
+.signac_shell_history
+.signac_sp_cache.json.gz
+submitter.out
+signac_project_document.json
+slurm*.out
+status.txt
 
-# files to init new jobs
+# initialization scripts
 init.py
 init-fewer-guests.py
 init-guest-concentration.py
 init-guest-polydispersity.py
 init-same-offset.py
 init-single-guest.py
+
+# miscellaneous scripts
+get-times.py
+set-stop.py
+test-dashboard.py
+move-output-files.py
+submit.bash
+submitter.bash
+dashboard.py
+
+# other
+__pycache__/
+analysis/
+pore-finding/host_guest_analysis.egg-info/
