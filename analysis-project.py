@@ -1,3 +1,4 @@
+import collections
 import flow
 from flow import FlowProject, directives, cmd
 from flow import environments
@@ -158,10 +159,11 @@ def analyze_pore_loading(job):
     filename = job.fn('traj.gsd')
     if not 'pore_stats' in job.doc:
         job.doc.pore_stats = dict()
+    num_guest_types = len(job.sp.guest_info)
     with gsd.hoomd.open(filename, 'rb') as gsd_file:
         for frame in gsd_file:
             timestep = frame.configuration.step
-            if timestep in job.doc.pore_stats:
+            if str(timestep) in job.doc.pore_stats:
                 continue
 
             # get stuff
@@ -174,7 +176,7 @@ def analyze_pore_loading(job):
             host_idxs = np.argwhere(
                 frame.particles.typeid == typeid_A).flatten()
             guest_idxs = np.argwhere(
-                frame.particles.typeid == typeid_B).flatten()
+                frame.particles.typeid != typeid_A).flatten()
             host_positions = pos[host_idxs]
             host_orientations = ors[host_idxs]
             guest_positions = pos[guest_idxs]
@@ -226,11 +228,12 @@ def analyze_pore_loading(job):
             global_idxs_guests_in_pores = guest_idxs[captured_guest_idxs]
             num_pores = len(unique_hexamers)
             num_captured_guests = len(captured_guest_idxs)
-            if num_pores == 0:
-                fractional_loading = 0
-            else:
-                fractional_loading = num_captured_guests / num_pores
-            job.doc.pore_stats[int(timestep)] = (num_pores, num_captured_guests, fractional_loading)
+            cc = collections.Counter(frame.particles.typeid[global_idxs_guests_in_pores])
+            frame_stats = [num_pores]
+            frame_stats.extend(
+                [cc[gtypid] for gtypid in range(1, 1 + num_guest_types)]
+            )
+            job.doc.pore_stats[str(timestep)] = frame_stats
     write_ts_for_post_condition(job, 'pore-analysis-timesteps.txt')
 
     
